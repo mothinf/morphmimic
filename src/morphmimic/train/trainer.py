@@ -182,6 +182,7 @@ ADDED_CFG_DEFAULTS: dict[str, object] = {
   "pool_norms": False,
   # Every run before the switch had the position-free goal.
   "goal_anchor": "reference",
+  "terrain": "plane",
 }
 # Fields a resume takes from the checkpoint's cfg (a cfg without the field: its
 # `ADDED_CFG_DEFAULTS` value) unless the run names them (`Trainer.load(explicit=)`):
@@ -256,9 +257,11 @@ class TrainCfg:
   """Subset yaml of the run's clips (single-robot runs; required there). Multi-robot
   runs use `subset_yamls` and save each rank's own here."""
   robot: str = "g1"
-  """Robot of the run (`morphmimic.robots` registry name: "g1", "x2", "t2"); the clips
+  """Robot of the run (`morphmimic.robots` registry name: "g1", "x2", "t2", "t800"); the clips
   of `subset_yaml` must be this robot's. Multi-robot runs ignore it and save each
   rank's robot here."""
+  terrain: Literal["plane", "smooth_random_2cm"] = "plane"
+  """T800 floor geometry only. The heightfield is stored in env/terrains/."""
   num_envs: int = 4096
   replay_capacity: int = 1000
   wm_lr: float = 2e-4
@@ -1003,6 +1006,7 @@ class Trainer:
       num_envs=cfg.num_envs,
       actuator_delay=cfg.actuator_delay,
       goal_anchor=cfg.goal_anchor,
+      terrain=cfg.terrain,
     )
     env_cfg.seed = cfg.seed + self.rank
     command_cfg = env_cfg.commands[COMMAND_NAME]

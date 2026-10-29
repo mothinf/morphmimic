@@ -45,9 +45,10 @@ class CanonicalJointPositionAction(JointPositionAction):
         f" got targets {self._target_names}."
       )
     self._perm = torch.as_tensor(tr.perm, dtype=torch.long, device=self.device)
+    self._valid = self._perm >= 0
     self._sign = torch.as_tensor(tr.sign, dtype=torch.float32, device=self.device)
     scale = torch.as_tensor(self._scale, dtype=torch.float32, device=self.device)
-    self._scale_canon = scale.expand(self.num_envs, tr.num_native)[:, self._perm]
+    self._scale_canon = scale.expand(self.num_envs, tr.num_native)[:, self._perm.clamp_min(0)]
     self._action_dim = NUM_JOINTS
     self._raw_actions = torch.zeros(self.num_envs, NUM_JOINTS, device=self.device)
 
@@ -55,7 +56,9 @@ class CanonicalJointPositionAction(JointPositionAction):
     """Canonical action [N, 29] -> native targets: default + to_native_delta(a * s)."""
     self._raw_actions[:] = actions
     delta = torch.zeros_like(self._processed_actions)
-    delta[:, self._perm] = self._sign * self._raw_actions * self._scale_canon
+    delta[:, self._perm[self._valid]] = (
+      self._sign * self._raw_actions * self._scale_canon
+    )[:, self._valid]
     self._processed_actions = delta + self._offset
     if self.cfg.clip is not None:
       self._processed_actions = torch.clamp(

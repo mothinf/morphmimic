@@ -32,8 +32,9 @@ between body origins in the world frame (as `spec.leg_length`), left side where 
   8 arm mass   `body_subtreemass` of the parent of tb[8], which must hang off tb[7]
                (left_shoulder_pitch_link on all three)
 
-Every feature (log terms and geometry alike) is min-max scaled to [-1, 1] over the
-robots of `ROBOTS`; a feature equal on all of them maps to 0. Raw descriptors and the
+Every feature (log terms and geometry alike) is min-max scaled using the original
+G1/X2/T2 baseline; a feature equal on all three maps to 0. Added robots may lie
+outside [-1, 1], preserving the inputs of existing checkpoints. Raw descriptors and the
 scaled table are cached per process; importing this module compiles no model.
 """
 
@@ -88,6 +89,10 @@ def _actuator_terms(spec: RobotSpec) -> dict[str, np.ndarray]:
   scale_keys = list(spec.action_scale)
   out = {k: np.empty(NUM_CANON) for k in _ACTUATOR_KEYS}
   for slot, native in enumerate(spec.translator.perm):
+    if native < 0:
+      for values in out.values():
+        values[slot] = 1.0  # Neutral log descriptor for an absent actuator.
+      continue
     joint = spec.joint_names[native]
     a = actuators[_one_match(joint, act_exprs, f"{spec.name} actuator configs")]
     key = scale_keys[
@@ -128,14 +133,14 @@ def _geometry(spec: RobotSpec) -> np.ndarray:
     )
   return np.array(
     [
-      dist("left_hip_pitch_link", tb[2]),
-      dist(tb[2], "left_ankle_pitch_link"),
+      dist(spec.hip_pitch_body, tb[2]),
+      dist(tb[2], spec.ankle_pitch_body),
       dist(tb[8], tb[9]),
       dist(tb[9], tb[10]),
       dist(tb[1], tb[4]),
       abs(float(pos(tb[0])[2] - 0.5 * (pos(tb[8])[2] + pos(tb[11])[2]))),
       float(mujoco.mj_getTotalmass(model)),
-      float(model.body_subtreemass[model.body("left_hip_pitch_link").id]),
+      float(model.body_subtreemass[model.body(spec.hip_pitch_body).id]),
       float(model.body_subtreemass[shoulder]),
     ]
   )
@@ -160,7 +165,9 @@ def _raw(name: str) -> np.ndarray:
 def _table() -> dict[str, np.ndarray]:
   """Per-feature min-max scaled [125] vector per registry robot."""
   raw = np.stack([_raw(n) for n in ROBOTS])
-  lo, hi = raw.min(0), raw.max(0)
+  # Preserve the normalization of existing G1/X2/T2 checkpoints.
+  baseline = np.stack([_raw(n) for n in ("g1", "x2", "t2")])
+  lo, hi = baseline.min(0), baseline.max(0)
   span = hi - lo
   const = span <= 1e-12 * np.maximum(1.0, np.abs(hi))
   scaled = np.where(const, 0.0, 2 * (raw - lo) / np.where(const, 1.0, span) - 1)

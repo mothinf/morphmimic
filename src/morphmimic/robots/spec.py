@@ -28,7 +28,7 @@ class Translator:
   q_canon = sign * (q_native[perm] - offset).
   """
 
-  perm: tuple[int, ...]  # len 29: native index of each canonical slot
+  perm: tuple[int, ...]  # len 29: native index; -1 marks an absent joint
   sign: tuple[float, ...]  # len 29, each +1.0 or -1.0
   offset: tuple[float, ...]  # len 29, radians
   num_native: int
@@ -42,35 +42,38 @@ class Translator:
   def to_canonical(self, q: Tensor) -> Tensor:
     """Native joint positions [..., J] -> canonical [..., 29]."""
     perm, sign, offset = self._tensors(q)
-    return sign * (q[..., perm] - offset)
+    return torch.where(perm >= 0, sign * (q[..., perm.clamp_min(0)] - offset), 0.0)
 
   def to_canonical_delta(self, x: Tensor) -> Tensor:
     """Velocities, biases, actions [..., J] -> [..., 29]: sign * x[perm], no offset."""
     perm, sign, _ = self._tensors(x)
-    return sign * x[..., perm]
+    return torch.where(perm >= 0, sign * x[..., perm.clamp_min(0)], 0.0)
 
   def to_native(self, q: Tensor, default: Tensor) -> Tensor:
     """Canonical [..., 29] + default [J] -> native [..., J]; untracked = default."""
     perm, sign, offset = self._tensors(q)
     out = default.to(device=q.device, dtype=q.dtype)
     out = out.expand(*q.shape[:-1], self.num_native).clone()
-    out[..., perm] = sign * q + offset
+    valid = perm >= 0
+    out[..., perm[valid]] = (sign * q + offset)[..., valid]
     return out
 
   def to_native_delta(self, x: Tensor) -> Tensor:
     """Canonical deltas [..., 29] -> native [..., J]; untracked = 0."""
     perm, sign, _ = self._tensors(x)
     out = x.new_zeros(*x.shape[:-1], self.num_native)
-    out[..., perm] = sign * x
+    valid = perm >= 0
+    out[..., perm[valid]] = (sign * x)[..., valid]
     return out
 
   def limits_to_canonical(self, limits: Tensor) -> Tensor:
     """Native [J, 2] (lo, hi) -> canonical [29, 2], bounds swapped where sign < 0."""
     perm, sign, offset = self._tensors(limits)
-    lo, hi = limits[perm].unbind(-1)
+    lo, hi = limits[perm.clamp_min(0)].unbind(-1)
     a = sign * (lo - offset)
     b = sign * (hi - offset)
-    return torch.stack([torch.minimum(a, b), torch.maximum(a, b)], -1)
+    bounds = torch.stack([torch.minimum(a, b), torch.maximum(a, b)], -1)
+    return torch.where((perm >= 0).unsqueeze(-1), bounds, 0.0)
 
   @property
   def untracked(self) -> tuple[int, ...]:
@@ -88,24 +91,27 @@ class Translator:
   def from_names(
     cls,
     native: Sequence[str],
-    canonical_to_native: Mapping[str, str],
+    canonical_to_native: Mapping[str, str | None],
     sign: Mapping[str, float],
     offset: Mapping[str, float],
   ) -> Translator:
     """Build from joint names. All three mappings are keyed by canonical joint name and
-    are sparse: a missing key means the same native name, sign +1.0, offset 0.0."""
+    are sparse: a missing key means the same native name, sign +1.0, offset 0.0.
+    An explicit None target represents an absent canonical joint; reads return zero
+    and writes ignore that slot."""
     for what, m in (("map", canonical_to_native), ("sign", sign), ("offset", offset)):
       unknown = sorted(set(m) - set(JOINT_NAMES))
       if unknown:
         raise ValueError(f"{what} keys are not canonical joints: {unknown}")
     targets = [canonical_to_native.get(c, c) for c in JOINT_NAMES]
-    missing = [c for c, n in zip(JOINT_NAMES, targets) if n not in native]
+    missing = [c for c, n in zip(JOINT_NAMES, targets) if n is not None and n not in native]
     if missing:
       raise ValueError(f"canonical joints without a native match: {missing}")
-    if len(set(targets)) != len(targets):
+    present = [n for n in targets if n is not None]
+    if len(set(present)) != len(present):
       raise ValueError(f"canonical joints map to the same native joint: {targets}")
     return cls(
-      perm=tuple(native.index(n) for n in targets),
+      perm=tuple(-1 if n is None else native.index(n) for n in targets),
       sign=tuple(float(sign.get(c, 1.0)) for c in JOINT_NAMES),
       offset=tuple(float(offset.get(c, 0.0)) for c in JOINT_NAMES),
       num_native=len(native),
@@ -134,6 +140,8 @@ class RobotSpec:
   contact_budget: tuple[int, int]  # (nconmax, njmax)
   # Bodies left out of the lowest-body-height statistic.
   zmin_exclude_regex: str | None = None
+  hip_pitch_body: str = "left_hip_pitch_link"
+  ankle_pitch_body: str = "left_ankle_pitch_link"
 
   @property
   def imu_slot(self) -> int:

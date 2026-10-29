@@ -1,0 +1,12 @@
+<mujoco model="t800_smooth_random_2cm">
+  <!-- Seed 0, 10 cm grid, Gaussian sigma 30 cm; normalized after smoothing.
+       160 m x 160 m, exactly 2 cm peak-to-valley, centered around z=0. -->
+  <asset>
+    <hfield name="t800_smooth_random_2cm" file="smooth_random_2cm.bin"
+            size="80 80 0.02 0.10" />
+  </asset>
+  <worldbody>
+    <geom name="terrain" type="hfield" hfield="t800_smooth_random_2cm"
+          pos="0 0 -0.01" mass="0" />
+  </worldbody>
+</mujoco>

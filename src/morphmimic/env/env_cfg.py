@@ -25,6 +25,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Literal
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
@@ -42,6 +43,7 @@ from morphmimic.env import observations as obs
 from morphmimic.env import terminations
 from morphmimic.env.actions import CanonicalJointPositionActionCfg
 from morphmimic.env.commands import MultiMotionCommandCfg
+from morphmimic.env.terrain import replace_floor_from_xml
 from morphmimic.robots import RobotSpec, get_robot
 
 COMMAND_NAME = "motion"
@@ -109,6 +111,7 @@ def morphmimic_env_cfg(
   eval: bool = False,
   actuator_delay: bool = True,
   goal_anchor: GoalAnchor = "reference",
+  terrain: Literal["plane", "smooth_random_2cm"] = "plane",
 ) -> ManagerBasedRlEnvCfg:
   """Env cfg of `robot` (a `morphmimic.robots` registry name) over the clips of
   `subset_yaml` (the library is built with the env; its clips must be that robot's).
@@ -125,6 +128,10 @@ def morphmimic_env_cfg(
   goal_anchor: frame of the motion goal's anchor position
   (`MultiMotionCommandCfg.goal_anchor`, `rewards_torch.goal_features`).
   """
+  if terrain not in ("plane", "smooth_random_2cm"):
+    raise ValueError(f"unknown terrain: {terrain}")
+  if terrain != "plane" and robot != "t800":
+    raise ValueError("smooth_random_2cm is supported only for T800")
   spec = get_robot(robot)
   cfg = make_tracking_env_cfg()
   cfg.scene.entities = {"robot": spec.entity_cfg_fn()}
@@ -214,6 +221,9 @@ def morphmimic_env_cfg(
   cfg.scene.terrain.geoms = (
     GeomCfg(geom_names_expr=(FLOOR_GEOM_NAME,), friction=(floor_friction,)),
   )
+
+  if terrain == "smooth_random_2cm":
+    cfg.scene.spec_fn = replace_floor_from_xml
 
   return cfg
 

@@ -1,0 +1,4 @@
+root: data/t800
+hours: 0.005533333333333334
+clips:
+  - walk_straight_slow_001_Skeleton9_mujoco50.npz

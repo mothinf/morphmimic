@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import mujoco
@@ -186,6 +187,8 @@ SAME_MODEL_FIELDS = (
   "actuator_gainprm", "actuator_biasprm", "actuator_forcerange", "actuator_ctrlrange",
   "actuator_trnid", "geom_friction", "geom_size", "geom_contype", "geom_conaffinity",
   "geom_condim", "geom_solref", "geom_solimp",
+  "geom_type", "geom_pos", "geom_dataid",
+  "hfield_size", "hfield_nrow", "hfield_ncol", "hfield_adr", "hfield_data",
 )
 SAME_OPTION_FIELDS = (
   "timestep", "integrator", "iterations", "ls_iterations", "cone", "solver", "gravity",
@@ -216,7 +219,7 @@ def _option_xml(opt) -> str:
 
 def write_scene_xml(env, robot: str, out: Path) -> Path:
   """The env's scene as standalone MJCF `<out>/<robot>.xml`, its meshes copied to
-  `<out>/meshes/<robot>/`."""
+  `<out>/meshes/<robot>/` and file textures to `<out>/textures/<robot>/`."""
   from mjlab.utils.spec import fix_spec_xml, strip_buffer_textures
 
   from morphmimic.robots import get_robot
@@ -225,11 +228,33 @@ def write_scene_xml(env, robot: str, out: Path) -> Path:
   strip_buffer_textures(spec)
   xml = fix_spec_xml(spec.to_xml(), meshdir=f"meshes/{robot}")
   child = get_robot(robot).entity_cfg_fn().spec_fn()
-  src = Path(child.modelfiledir) / child.meshdir
-  mesh_dir = out / "meshes" / robot
-  mesh_dir.mkdir(parents=True, exist_ok=True)
-  for name in sorted(set(re.findall(r'<mesh [^>]*file="([^"]+)"', xml))):
-    shutil.copy2(src / name, mesh_dir / Path(name).name)
+  root = ET.fromstring(xml)
+  compiler = root.find("compiler")
+  compiler.set("texturedir", f"textures/{robot}")
+  for tag, source_dir, target_dir in (
+    ("mesh", child.meshdir, out / "meshes" / robot),
+    ("texture", child.texturedir, out / "textures" / robot),
+  ):
+    src = Path(child.modelfiledir) / source_dir
+    for asset in root.findall(f"asset/{tag}[@file]"):
+      name = Path(asset.attrib["file"])
+      # Keep nested relative paths; flattening breaks the XML's file references.
+      relative = Path(name.name) if name.is_absolute() else name
+      target = target_dir / relative
+      target.parent.mkdir(parents=True, exist_ok=True)
+      shutil.copy2(src / name, target)
+      asset.set("file", relative.as_posix())
+  for asset in root.findall("asset/hfield[@file]"):
+    source = Path(asset.attrib["file"])
+    if not source.is_absolute():
+      source = Path(spec.modelfiledir) / source
+    # MuJoCo resolves heightfield files through compiler.meshdir as well.
+    relative = Path("heightfields") / source.name
+    target = out / "meshes" / robot / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    asset.set("file", relative.as_posix())
+  xml = ET.tostring(root, encoding="unicode") + "\n"
   if "<option" in xml:
     raise ValueError("the scene XML already has an <option> element")
   # The solver settings training used, right after the <compiler> element.
@@ -286,8 +311,8 @@ def export_clips(env, robot: str, yaml_path: str, clips: list[str], out: Path) -
   """`<out>/clips/<robot>/<clip>.npz` for each clip (see the module docstring)."""
   import torch
 
-  from morphmimic.robots import get_robot
   from deploy.sim2sim.clip_playback import ClipPlayback, resolve_clip
+  from morphmimic.robots import get_robot
 
   spec = get_robot(robot)
   m = env.sim.mj_model
@@ -324,8 +349,10 @@ def export_clips(env, robot: str, yaml_path: str, clips: list[str], out: Path) -
 
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  parser.add_argument("--robot", required=True, choices=["g1", "x2", "t2"])
+  parser.add_argument("--robot", required=True, choices=["g1", "x2", "t2", "t800"])
   parser.add_argument("--subset-yaml", required=True)
+  parser.add_argument("--terrain", choices=["plane", "smooth_random_2cm"], default="plane",
+                      help="Select the same floor variant as the training run.")
   parser.add_argument("--clips", nargs="+", required=True)
   parser.add_argument("--out", type=Path, required=True)
   parser.add_argument("--bake", action="store_true", help="also write robots/<robot>.json")
@@ -337,7 +364,9 @@ def main() -> None:
   from morphmimic.env.env_cfg import morphmimic_env_cfg
   from morphmimic.env.morphmimic_env import MorphMimicEnv
 
-  cfg = morphmimic_env_cfg(args.robot, subset_yaml=args.subset_yaml, num_envs=1, eval=True)
+  cfg = morphmimic_env_cfg(
+    args.robot, subset_yaml=args.subset_yaml, num_envs=1, eval=True, terrain=args.terrain
+  )
   env = MorphMimicEnv(cfg, "cuda:0")
   try:
     args.out.mkdir(parents=True, exist_ok=True)

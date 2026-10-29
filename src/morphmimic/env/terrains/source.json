@@ -1,0 +1,15 @@
+{
+  "seed": 0,
+  "grid_shape": [
+    1601,
+    1601
+  ],
+  "grid_spacing_m": 0.1,
+  "smoothing_sigma_m": 0.3,
+  "peak_to_valley_m": 0.02,
+  "height_offset_m": -0.01,
+  "generation": "numpy.random.default_rng(0).standard_normal; scipy.ndimage.gaussian_filter(sigma=3, mode=reflect); normalize to [0,1] after smoothing; float32",
+  "binary_format": "little-endian int32 nrow, int32 ncol, then row-major float32 samples",
+  "binary_sha256": "8cc76951553208fcbd892eb37558112d6f3a91dade5debc9c17e415e894aeb86",
+  "half_size_m": 80.0
+}

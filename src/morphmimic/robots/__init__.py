@@ -9,7 +9,7 @@ from functools import cache
 
 from morphmimic.robots.spec import RobotSpec, Translator
 
-ROBOTS: tuple[str, ...] = ("g1", "x2", "t2")
+ROBOTS: tuple[str, ...] = ("g1", "x2", "t2", "t800")
 
 __all__ = ["ROBOTS", "RobotSpec", "Translator", "check_imu_body", "get_robot"]
 
@@ -28,6 +28,10 @@ def get_robot(name: str) -> RobotSpec:
     from morphmimic.robots.t2 import t2_spec
 
     return t2_spec()
+  if name == "t800":
+    from morphmimic.robots.t800 import t800_spec
+
+    return t800_spec()
   raise ValueError(f"unknown robot {name!r}; expected one of {ROBOTS}")
 
 

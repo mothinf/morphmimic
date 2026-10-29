@@ -1,0 +1,12 @@
+{
+  "source_url": "https://raw.githubusercontent.com/engineai-robotics/engineai_rl_lab/main/datasets/amp/t800/data/walk_straight_slow_001_Skeleton9.npz",
+  "source_sha256": "709f0de0fe50042d844a1d0967210581c2e26dcf57ed821b99ee4716cd3f0b4f",
+  "input_fps": 100.0,
+  "output_fps": 50,
+  "output_frames": 996,
+  "seconds": 19.92,
+  "head_joint_max_abs": 0.13569917647316115,
+  "output": "walk_straight_slow_001_Skeleton9_mujoco50.npz",
+  "subset": "subsets/walk_straight_slow.yaml",
+  "output_sha256": "7173c1151f78d75a18533c86eb87d06197b115d80fe8676f1aecb69618587ce7"
+}

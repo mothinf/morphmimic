@@ -209,16 +209,17 @@ class Robot:
     )
 
   def to_canonical(self, q: np.ndarray) -> np.ndarray:
-    return self.sign * (q[..., self.perm] - self.offset)
+    return np.where(self.perm >= 0, self.sign * (q[..., self.perm.clip(min=0)] - self.offset), 0.0)
 
   def to_canonical_delta(self, x: np.ndarray) -> np.ndarray:
-    return self.sign * x[..., self.perm]
+    return np.where(self.perm >= 0, self.sign * x[..., self.perm.clip(min=0)], 0.0)
 
   def targets(self, action: np.ndarray) -> np.ndarray:
     """Canonical action [29] -> native joint targets [J] (`CanonicalJointPositionAction`:
     default + to_native_delta(a * scale); untracked joints held at the default)."""
     delta = np.zeros(self.num_native)
-    delta[self.perm] = self.sign * action * self.action_scale[self.perm]
+    valid = self.perm >= 0
+    delta[self.perm[valid]] = self.sign[valid] * action[valid] * self.action_scale[self.perm[valid]]
     return self.default_joint_pos + delta
 
   def _tree_quats(self, q: np.ndarray) -> np.ndarray:

@@ -9,6 +9,9 @@ Lizhi Yang, Fengze Xie\*, Yuyang Wang\*, Lu Gan, Yisong Yue, Aaron D. Ames
 [[Video]](https://lzyang2000.github.io/morphmimic/static/videos/morphmimic.mp4)
 [[Live demo]](https://lzyang2000.github.io/morphmimic/demo/)
 
+**T800 branch:** [T800 walk data, default training setup and 2 cm heightfield](docs/t800.md).
+Start training with `bash tools/train_t800_walk_hfield_2cm.sh`.
+
 > **Disclaimer.** MorphMimic builds on SuperMimic (Liao, Shao, Long, Zakka, Horowitz,
 > Abbeel and Sreenath, UC Berkeley; [citation below](#citation)). The base algorithm is
 > our own implementation of that paper, written from the paper alone. It is not the
